@@ -1,3 +1,4 @@
+#include <iostream>
 #include "http_conn.h"
 
 //响应状态信息
@@ -10,7 +11,7 @@ const char* error_404_title = "Not Found";
 const char* error_404_form = "The requested file was not found on this server.\n";
 const char* error_500_title = "Internal Error";
 const char* error_500_form = "There was an unusual problem serving the requested file.\n";
-const char* doc_root = "/var/www/html"; //网站根目录
+const char* doc_root = "./html"; //网站根目录
 
 
 // int setnonblocking(int fd)
@@ -175,7 +176,10 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char* text)
         return BAD_REQUEST;
     }
     m_url += strspn(m_url, " \t"); //返回m_url中函数' \t'的长度；
+    std::cout<<"in parse request line";
     m_version = strpbrk(m_url, " \t");
+    std::cout<<m_url<<std::endl;
+    std::cout<<m_version<<std::endl;
     if(!m_version){
         return BAD_REQUEST;
     }
@@ -186,11 +190,16 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char* text)
         return BAD_REQUEST;
     }
 
+    std::cout<<m_url<<std::endl;
     if ( strncasecmp( m_url, "http://", 7 ) == 0 )
     {
         m_url += 7;
         m_url = strchr( m_url, '/' );
     }
+    // std::cout<<m_url<<std::endl;
+    // if(strncasecmp(m_url, "/index.html", 10) == 0){
+    //     return GET_REQUEST;
+    // }
 
     if ( ! m_url || m_url[ 0 ] != '/' )
     {
@@ -268,12 +277,14 @@ http_conn::HTTP_CODE http_conn::process_read()
         text = get_line();
         m_start_line = m_checked_idx;
         printf( "got 1 http line: %s\n", text );
+        printf("state %d\n", m_check_state);
 
         switch ( m_check_state )
         {
             case CHECK_STATE_REQUESTLINE:
             {
                 ret = parse_request_line( text );
+                std::cout<<"check state requestline:" << ret << std::endl;
                 if ( ret == BAD_REQUEST )
                 {
                     return BAD_REQUEST;
@@ -283,12 +294,14 @@ http_conn::HTTP_CODE http_conn::process_read()
             case CHECK_STATE_HEADER:
             {
                 ret = parse_headers( text );
+                std::cout<<"parse headers ret"<< ret << std::endl;
                 if ( ret == BAD_REQUEST )
                 {
                     return BAD_REQUEST;
                 }
                 else if ( ret == GET_REQUEST )
                 {
+                    std::cout<<"do request"<<std::endl;
                     return do_request();
                 }
                 break;
@@ -316,11 +329,15 @@ http_conn::HTTP_CODE http_conn::process_read()
 //分析目标文件，都正常就使用mmap将其银蛇到内存地址m_file_address处，告诉调用者成功获取文件
 http_conn::HTTP_CODE http_conn::do_request()
 {
+    if(strcasecmp(m_url, "/") == 0){
+        m_url = "/index.html";
+    }
     strcpy( m_real_file, doc_root );
     int len = strlen( doc_root );
     strncpy( m_real_file + len, m_url, FILENAME_LEN - len - 1 );
     if ( stat( m_real_file, &m_file_stat ) < 0 )
-    {
+    {   
+        std::cout<<"no source" << std::endl;
         return NO_RESOURCE;
     }
 
@@ -337,6 +354,7 @@ http_conn::HTTP_CODE http_conn::do_request()
     int fd = open( m_real_file, O_RDONLY );
     m_file_address = ( char* )mmap( 0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0 );
     close( fd );
+    // std::cout<<"file request"<<std::endl;
     return FILE_REQUEST;
 }
 //unmap
@@ -356,6 +374,8 @@ bool http_conn::write()
     int temp = 0;
     int bytes_have_send = 0;
     int bytes_to_send = m_write_idx;
+    // std::cout<<"in write"<<std::endl;
+    // std::cout<<m_write_idx<<std::endl;
     if ( bytes_to_send == 0 )
     {
         modfd( m_epollfd, m_sockfd, EPOLLIN );
@@ -366,6 +386,7 @@ bool http_conn::write()
     while( 1 )
     {
         temp = writev( m_sockfd, m_iv, m_iv_count );
+        // std::cout<<temp<<std::endl;
         if ( temp <= -1 )
         {
             //tcp写缓存没有空间，等待下一轮epollout
@@ -380,6 +401,8 @@ bool http_conn::write()
 
         bytes_to_send -= temp;
         bytes_have_send += temp;
+        // std::cout<<bytes_to_send<<" "<<bytes_have_send<<std::endl;
+
         //发送http响应成功
         if ( bytes_to_send <= bytes_have_send )
         {
@@ -558,18 +581,23 @@ bool http_conn::process_write( HTTP_CODE ret )
 //由线程池的worker线程调用，是处理http请求的入口
 void http_conn::process()
 {
+    // std::cout<<"process fd: "<< m_sockfd<<std::endl;
     HTTP_CODE read_ret = process_read();
     if ( read_ret == NO_REQUEST )
     {
         modfd( m_epollfd, m_sockfd, EPOLLIN );
         return;
     }
+    // std::cout<<"process read return" << read_ret<<std::endl;
+
 
     bool write_ret = process_write( read_ret );
     if ( ! write_ret )
     {
         close_conn();
     }
+    // std::cout<<write_ret<<std::endl;
+
 
     modfd( m_epollfd, m_sockfd, EPOLLOUT );
 }

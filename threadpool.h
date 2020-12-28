@@ -91,7 +91,7 @@ template<typename T>
 bool threadpool<T>::append(T* requests)
 {
     //操作工作队列时一定要加锁， 因为它被所有线程共享
-    MutexLockGuard lock(m_mutex);
+    MutexLockGuard lock(this->m_mutex);
     if(m_workqueue.size() > m_max_requests)
     {
         std::cout << "too many request" << std::endl;
@@ -105,7 +105,10 @@ bool threadpool<T>::append(T* requests)
 template<typename T>
 void* threadpool<T>::worker(void* arg)
 {
+    std::cout<<"in worker" << std::endl;
     threadpool* pool = (threadpool*) arg;
+    if(pool == nullptr)
+        return NULL;
     pool->run();
     return pool;
 }
@@ -113,12 +116,13 @@ void* threadpool<T>::worker(void* arg)
 template<typename T>
 void threadpool<T>::run()
 {
+    std::cout<<"worker ran"<<std::endl;
     while(!m_stop)
     {
         T* request;
         {
-            MutexLockGuard lock(m_mutex);
-            while(m_workqueue.empty())
+            MutexLockGuard lock(this->m_mutex);
+            while(m_workqueue.empty() && !m_stop)
             {
                 m_cond.wait();
             }

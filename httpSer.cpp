@@ -37,13 +37,16 @@ c++语言支持分离式编译机制，该机制允许将程序分割为若干�
 
 int main( int argc, char* argv[] )
 {
-    if( argc <= 2 )
-    {
-        printf( "usage: %s ip_address port_number\n", basename( argv[0] ) );
-        return 1;
-    }
-    const char* ip = argv[1];
-    int port = atoi( argv[2] );
+    // if( argc <= 2 )
+    // {
+    //     printf( "usage: %s ip_address port_number\n", basename( argv[0] ) );
+    //     return 1;
+    // }
+
+    // const char* ip = argv[1];
+    // int port = atoi( argv[2] );
+    const char* ip = "127.0.0.1";
+    int port = atoi(argv[1]);
 
     //忽略sigpipe信号
     addsig( SIGPIPE, SIG_IGN );
@@ -84,8 +87,8 @@ int main( int argc, char* argv[] )
     addfd( epollfd, listenfd, false );
     http_conn::m_epollfd = epollfd;
 
-    // http_conn* users = new http_conn[MAX_FD];
-    std::unordered_map<int, http_conn*> http_conn_map;
+    http_conn* http_conn_map = new http_conn[MAX_FD];
+    // std::unordered_map<int, http_conn*> http_conn_map;
     // assert(users);
     int user_count = 0;
 
@@ -116,29 +119,35 @@ int main( int argc, char* argv[] )
                     show_error( connfd, "Internal server busy" );
                     continue;
                 }
-                
-                http_conn_map[connfd]->init( connfd, client_address );
+                // std::cout<<connfd<<std::endl;
+                http_conn_map[connfd].init( connfd, client_address );
             }
             else if(events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
             {
-                http_conn_map[sockfd]->close_conn();
+                http_conn_map[sockfd].close_conn();
             }
             else if(events[i].events & EPOLLIN)
             {
-                if(http_conn_map[sockfd]->read())
+                if(http_conn_map[sockfd].read())
                 {
-                    pool->append(http_conn_map[sockfd]);
+                    // std::cout<< "pool append"<<std::endl;
+                    pool->append(http_conn_map + sockfd);
                 }
                 else
                 {
-                    http_conn_map[sockfd]->close_conn();
+                    // std::cout<<"close in read"<<std::endl;
+                    http_conn_map[sockfd].close_conn();
                 }
                 
             }
             else if(events[i].events & EPOLLOUT)
             {
-                if(!http_conn_map[sockfd]->write())
-                    http_conn_map[sockfd]->close_conn();
+                // std::cout<<"epollout"<<std::endl;
+                if(!http_conn_map[sockfd].write()){
+                    http_conn_map[sockfd].close_conn();
+                    // std::cout<<"write erro" << std::endl;
+                }
+                    
             }
             else
             {
