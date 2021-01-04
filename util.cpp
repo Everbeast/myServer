@@ -12,7 +12,15 @@ void addsig( int sig, void( handler )(int), bool restart)
     sigfillset( &sa.sa_mask );
     assert( sigaction( sig, &sa, NULL ) != -1 );
 }
-
+void handle_for_sigpipe()
+{
+    struct sigaction sa;
+    memset(&sa, '\0', sizeof(sa));
+    sa.sa_handler = SIG_IGN;
+    sa.sa_flags = 0;
+    if(sigaction(SIGPIPE, &sa, NULL))
+        return;
+}
 
 int setnonblocking(int fd)
 {
@@ -29,11 +37,11 @@ void show_error( int connfd, const char* info )
     close( connfd );
 }
 
-void addfd(int epollfd, int fd, bool one_shot)
+void addfd(int epollfd, int fd, bool one_shot, uint32_t events)
 {
     epoll_event event;
     event.data.fd = fd;
-    event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+    event.events = events | EPOLLIN;
     if(one_shot)
     {
         event.events |= EPOLLONESHOT;
@@ -43,7 +51,7 @@ void addfd(int epollfd, int fd, bool one_shot)
 }
 
 void removefd(int epollfd, int fd)
-{
+{   //epoll_event ev;
     epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, 0);
     close(fd);
 }
@@ -53,6 +61,8 @@ void modfd(int epollfd, int fd, int ev)
 {
     epoll_event event;
     event.data.fd = fd;
-    event.events = ev | EPOLLET | EPOLLONESHOT | EPOLLHUP;
+    event.events = ev | EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
     epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &event);
 }
+
+

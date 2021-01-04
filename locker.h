@@ -94,6 +94,10 @@ public:
         return pthread_cond_signal(&m_cond) == 0;
     }
 
+    bool signal_all(){
+        return pthread_cond_broadcast(&m_cond) == 0;
+    }
+
 private:
     MutexLock& m_mutex;
     pthread_cond_t m_cond;

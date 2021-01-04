@@ -44,12 +44,12 @@ public:
 public:
     //初始化新接收的连接
     void init( int sockfd, const sockaddr_in& addr );
-    void close_conn( bool real_close = true );
+    void close_conn();
     void process();
     bool read();
     bool write();
 
-private:
+public:
     //初始化连接
     void init();
     //解析http请求
@@ -79,9 +79,9 @@ public:
     //所有socket事件都注册到同一个epoll事件表中
     static int m_epollfd;
     static int m_user_count;
+    int m_sockfd;
 
 private:
-    int m_sockfd;
     sockaddr_in m_address;
 
     char m_read_buf[ READ_BUFFER_SIZE ];

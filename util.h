@@ -16,21 +16,22 @@
 #include <cassert>
 #include <sys/epoll.h>
 #include <signal.h>
+#include <iostream>
 
 
 void addsig( int sig, void( handler )(int), bool restart = true);
 
 
 int setnonblocking(int fd);
+void handle_for_sigpipe();
 
 void show_error( int connfd, const char* info );
 
-void addfd(int epollfd, int fd, bool one_shot);
+void addfd(int epollfd, int fd, bool one_shot, uint32_t events);
 
 void removefd(int epollfd, int fd);
 
 
 void modfd(int epollfd, int fd, int ev);
-
 
 // #endif

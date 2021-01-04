@@ -43,7 +43,21 @@
         "sstream": "cpp",
         "stdexcept": "cpp",
         "streambuf": "cpp",
-        "typeinfo": "cpp"
+        "typeinfo": "cpp",
+        "iostream": "cpp",
+        "unordered_set": "cpp",
+        "regex": "cpp",
+        "bitset": "cpp",
+        "chrono": "cpp",
+        "condition_variable": "cpp",
+        "cstring": "cpp",
+        "ctime": "cpp",
+        "map": "cpp",
+        "ratio": "cpp",
+        "shared_mutex": "cpp",
+        "cinttypes": "cpp",
+        "mutex": "cpp",
+        "thread": "cpp"
     },
     "C_Cpp.intelliSenseEngine": "Tag Parser"
 }

@@ -13,49 +13,18 @@ const char* error_500_title = "Internal Error";
 const char* error_500_form = "There was an unusual problem serving the requested file.\n";
 const char* doc_root = "./html"; //网站根目录
 
-
-// int setnonblocking(int fd)
-// {
-//     int old_option = fcntl(fd, F_GETFL);
-//     int new_option = old_option | O_NONBLOCK;
-//     fcntl(fd, F_SETFL, new_option);
-//     return old_option;
-// }
-
-// void addfd(int epollfd, int fd, bool one_shot)
-// {
-//     epoll_event event;
-//     event.data.fd = fd;
-//     event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
-//     if(one_shot)
-//     {
-//         event.events |= EPOLLONESHOT;
-//     }
-//     epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
-//     setnonblocking(fd);
-// }
-
-// void removefd(int epollfd, int fd)
-// {
-//     epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, 0);
-//     close(fd);
-// }
-
-// void modfd(int epollfd, int fd, int ev)
-// {
-//     epoll_event event;
-//     event.data.fd = fd;
-//     event.events = ev | EPOLLET | EPOLLONESHOT | EPOLLHUP;
-//     epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &event);
-// }
-
 int http_conn::m_user_count = 0;
 int http_conn::m_epollfd = -1;
 
-void http_conn::close_conn(bool real_close)
+void http_conn::close_conn()
 {
-    if(real_close && (m_sockfd != -1))
-    {
+    // if(real_close && (m_sockfd != -1))
+    // {
+    //     removefd(m_epollfd, m_sockfd);
+    //     m_sockfd = -1;
+    //     m_user_count--;
+    // }
+    if(m_sockfd != -1){
         removefd(m_epollfd, m_sockfd);
         m_sockfd = -1;
         m_user_count--;
@@ -64,9 +33,9 @@ void http_conn::close_conn(bool real_close)
 
 void http_conn::init(int sockfd, const sockaddr_in& addr)
 {
+    std::cout<<"init :" <<sockfd<<std::endl;
     m_sockfd = sockfd;
     m_address = addr;
-    addfd(m_epollfd, sockfd, true);
     m_user_count++;
 
     init();
@@ -113,16 +82,16 @@ http_conn::LINE_STATUS http_conn::parse_line()
             }
             return LINE_BAD;
         }
-        else if(temp == '\n')
-        {
-            if((m_checked_idx > 1) && (m_read_buf[m_checked_idx-1] == '\r'))
-            {
-                m_read_buf[m_checked_idx-1] = '\0';
-                m_read_buf[m_checked_idx++] = '\0';
-                return LINE_OK;
-            }
-            return LINE_BAD;
-        }
+        // else if(temp == '\n')
+        // {
+        //     if((m_checked_idx > 1) && (m_read_buf[m_checked_idx-1] == '\r'))
+        //     {
+        //         m_read_buf[m_checked_idx-1] = '\0';
+        //         m_read_buf[m_checked_idx++] = '\0';
+        //         return LINE_OK;
+        //     }
+        //     return LINE_BAD;
+        // }
     }
     return LINE_OPEN;
 }
@@ -138,10 +107,11 @@ bool http_conn::read()
     int bytes_read = 0;
     while(true)
     {
+        // std::cout<<"bytes recv:" << m_read_idx<<std::endl;
         bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE-m_read_idx, 0);
         if(bytes_read == -1)
         {
-            if(errno == EAGAIN || errno == EWOULDBLOCK)
+            if(errno == EAGAIN || errno == EWOULDBLOCK)//?
             {
                 break;
             }
@@ -159,12 +129,13 @@ bool http_conn::read()
 //解析请求行，获得请求方法 目标url http版本
 http_conn::HTTP_CODE http_conn::parse_request_line(char* text)
 {
-    m_url = strpbrk(text, " \t"); //在text找到第一个含有' \t'的位置
+    //GET /js/helper.js HTTP/1.1
+    m_url = strpbrk(text, " \t"); //在text找到第一个含有' \t'的位置 此处为4
     if(!m_url)
     {
         return BAD_REQUEST;
     }
-    *m_url++ = '\0';
+    *m_url++ = '\0'; 
 
     char* method = text;
     if(strcasecmp(method, "GET") == 0)
@@ -175,16 +146,16 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char* text)
     {
         return BAD_REQUEST;
     }
-    m_url += strspn(m_url, " \t"); //返回m_url中函数' \t'的长度；
-    std::cout<<"in parse request line";
-    m_version = strpbrk(m_url, " \t");
-    std::cout<<m_url<<std::endl;
-    std::cout<<m_version<<std::endl;
+    m_url += strspn(m_url, " \t"); //返回m_url中含有' \t'的长度；即+第一个 \t的长度，m_url就指着"/"
+    // std::cout<<"in parse request line";
+    m_version = strpbrk(m_url, " \t");//找/js/helper.js HTTP/1.1 第一个 \t的位置 即s后一个位置
+    // std::cout<<m_url<<std::endl;
+    // std::cout<<m_version<<std::endl;
     if(!m_version){
         return BAD_REQUEST;
     }
-    *m_version++ = '\0';
-    m_version += strspn(m_version, " \t");
+    *m_version++ = '\0'; //分割
+    m_version += strspn(m_version, " \t"); // 加上第一个 \t的长度，即m_version指向"H"
     if(strcasecmp(m_version, "HTTP/1.1") != 0)
     {
         return BAD_REQUEST;
@@ -201,12 +172,13 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char* text)
     //     return GET_REQUEST;
     // }
 
+    // 不以 "/"开头
     if ( ! m_url || m_url[ 0 ] != '/' )
     {
         return BAD_REQUEST;
     }
 
-    m_check_state = CHECK_STATE_HEADER;
+    m_check_state = CHECK_STATE_HEADER; // 改变状态机 转去调用parse header
     return NO_REQUEST;
 }
 
@@ -229,7 +201,7 @@ http_conn::HTTP_CODE http_conn::parse_headers(char* text)
     {
         text += 11;
         text += strspn(text, " \t");
-        if(strcasecmp(text, "keep_alive") == 0)
+        if(strcasecmp(text, "keep-alive") == 0)
             m_linger = true;
     }
     //处理content lenght头部字段
@@ -248,7 +220,7 @@ http_conn::HTTP_CODE http_conn::parse_headers(char* text)
     }
     else
     {
-        printf("unknown head %s \n", text);
+        // printf("unknown head %s \n", text);
     }
     return NO_REQUEST;
 }
@@ -276,15 +248,15 @@ http_conn::HTTP_CODE http_conn::process_read()
     {
         text = get_line();
         m_start_line = m_checked_idx;
-        printf( "got 1 http line: %s\n", text );
-        printf("state %d\n", m_check_state);
+        // printf( "got 1 http line: %s\n", text );
+        // printf("state %d\n", m_check_state);
 
         switch ( m_check_state )
         {
             case CHECK_STATE_REQUESTLINE:
             {
                 ret = parse_request_line( text );
-                std::cout<<"check state requestline:" << ret << std::endl;
+                // std::cout<<"check state requestline:" << ret << std::endl;
                 if ( ret == BAD_REQUEST )
                 {
                     return BAD_REQUEST;
@@ -294,7 +266,7 @@ http_conn::HTTP_CODE http_conn::process_read()
             case CHECK_STATE_HEADER:
             {
                 ret = parse_headers( text );
-                std::cout<<"parse headers ret"<< ret << std::endl;
+                // std::cout<<"parse headers ret"<< ret << std::endl;
                 if ( ret == BAD_REQUEST )
                 {
                     return BAD_REQUEST;
@@ -334,7 +306,7 @@ http_conn::HTTP_CODE http_conn::do_request()
     }
     strcpy( m_real_file, doc_root );
     int len = strlen( doc_root );
-    strncpy( m_real_file + len, m_url, FILENAME_LEN - len - 1 );
+    strncpy( m_real_file + len, m_url, FILENAME_LEN - len - 1 );//从m_real_file + len开始的位置复制m_url
     if ( stat( m_real_file, &m_file_stat ) < 0 )
     {   
         std::cout<<"no source" << std::endl;
@@ -364,7 +336,7 @@ void http_conn::unmap()
     if( m_file_address )
     {
         munmap( m_file_address, m_file_stat.st_size );
-        m_file_address = 0;
+        m_file_address = nullptr;
     }
 }
 //http响应
@@ -374,9 +346,9 @@ bool http_conn::write()
     int temp = 0;
     int bytes_have_send = 0;
     int bytes_to_send = m_write_idx;
-    // std::cout<<"in write"<<std::endl;
-    // std::cout<<m_write_idx<<std::endl;
-    if ( bytes_to_send == 0 )
+    std::cout<<"in write"<<std::endl;
+    std::cout<<m_write_idx<<std::endl;
+    if ( bytes_to_send == 0 )//没有数据发送 等待下轮epollin后 并重置writeidx readidx
     {
         modfd( m_epollfd, m_sockfd, EPOLLIN );
         init();
@@ -386,7 +358,6 @@ bool http_conn::write()
     while( 1 )
     {
         temp = writev( m_sockfd, m_iv, m_iv_count );
-        // std::cout<<temp<<std::endl;
         if ( temp <= -1 )
         {
             //tcp写缓存没有空间，等待下一轮epollout
@@ -474,6 +445,7 @@ bool http_conn::add_status_line( int status, const char* title )
 bool http_conn::add_headers( int content_len )
 {
     add_content_length( content_len );
+    add_response("Content-Type: %s\r\n", "text/html");
     add_linger();
     add_blank_line();
 }
@@ -545,6 +517,14 @@ bool http_conn::process_write( HTTP_CODE ret )
         }
         case FILE_REQUEST:
         {
+            // char header[2048];
+            // bzero(header, '\0');
+            // sprintf(header, "%s%s %d %s\r\n",header, "HTTP/1.1", 200, "OK");
+            // sprintf(header, "%sContent-length: %d\r\n\r\n", header, strlen(INDEX_PAGE));
+            // sprintf(header, "%s%s", header, INDEX_PAGE);
+            // send(m_sockfd, header, strlen(header), 0);
+            // return false;
+            std::cout<<"in file request"<<std::endl;
             add_status_line( 200, ok_200_title );
             if ( m_file_stat.st_size != 0 )
             {
@@ -553,6 +533,7 @@ bool http_conn::process_write( HTTP_CODE ret )
                 m_iv[ 0 ].iov_len = m_write_idx;
                 m_iv[ 1 ].iov_base = m_file_address;
                 m_iv[ 1 ].iov_len = m_file_stat.st_size;
+                // std::cout<<m_write_idx<<std::endl;
                 m_iv_count = 2;
                 return true;
             }
@@ -579,28 +560,32 @@ bool http_conn::process_write( HTTP_CODE ret )
 }
 
 //由线程池的worker线程调用，是处理http请求的入口
-void http_conn::process()
-{
-    // std::cout<<"process fd: "<< m_sockfd<<std::endl;
-    HTTP_CODE read_ret = process_read();
-    if ( read_ret == NO_REQUEST )
-    {
-        modfd( m_epollfd, m_sockfd, EPOLLIN );
-        return;
-    }
-    // std::cout<<"process read return" << read_ret<<std::endl;
+// void http_conn::process()
+// {
+//     std::cout<<"in process"<<std::endl;
+//     std::cout<<"user count: "<<m_user_count<<std::endl;
+//     HTTP_CODE read_ret = process_read();
+//     std::cout<<"process read return" << read_ret<<std::endl;
+//     if ( read_ret == NO_REQUEST )
+//     {
+//         modfd( m_epollfd, m_sockfd, EPOLLIN );
+//         return;
+//     }
 
 
-    bool write_ret = process_write( read_ret );
-    if ( ! write_ret )
-    {
-        close_conn();
-    }
-    // std::cout<<write_ret<<std::endl;
+//     bool write_ret = process_write( read_ret );
+//     if ( ! write_ret )
+//     {
+//         std::cout<<"close"<<std::endl;
+//         close_conn(true);
+//     }
+//     // std::cout<<write_ret<<std::endl;
+    
+
+//     modfd( m_epollfd, m_sockfd, EPOLLOUT );
 
 
-    modfd( m_epollfd, m_sockfd, EPOLLOUT );
-}
+// }
 
 
 
